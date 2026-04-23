@@ -1,0 +1,12 @@
+flutter_native_splash:
+  image: "assets/icon.png"
+  color: "#af0000"
+  fullscreen: true
+  web: false
+  ios: true
+  info_plist_files:
+    - 'ios/Runner/Info.plist'
+  android: true
+  android_12:
+    image: "assets/icon.png"
+    color: "#af0000"
