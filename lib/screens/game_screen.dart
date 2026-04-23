@@ -66,7 +66,7 @@ class GameScreen extends StatelessWidget {
   }
 
   Widget _buildProgressBar(GameStateProvider provider) {
-    final total = 30;
+    final total = provider.totalQuestions;
     final answered = provider.totalAnswered;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

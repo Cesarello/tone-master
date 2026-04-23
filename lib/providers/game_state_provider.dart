@@ -11,16 +11,24 @@ import '../services/tts_service.dart';
 enum AnswerState { idle, correct, wrong }
 
 class GameStateProvider extends ChangeNotifier {
+  static const int _roundSize = 20;
+
   GameStateProvider({TtsService? ttsService, FeedbackSoundService? feedbackSoundService})
     : _ttsService = ttsService ?? TtsService(),
-      _feedbackSoundService = feedbackSoundService {
+      _feedbackSoundService = feedbackSoundService,
+      _roundWords = _buildRoundWords() {
     Future.microtask(_autoSpeakIfEnabled);
+  }
+
+  static List<ToneWord> _buildRoundWords() {
+    final shuffledWords = List<ToneWord>.from(wordsList)..shuffle(Random());
+    return shuffledWords.take(min(_roundSize, shuffledWords.length)).toList(growable: false);
   }
 
   final TtsService _ttsService;
   FeedbackSoundService? _feedbackSoundService;
   FeedbackSoundService get feedbackSoundService => _feedbackSoundService ??= FeedbackSoundService();
-  final List<ToneWord> _shuffledWords = List.from(wordsList)..shuffle(Random());
+  List<ToneWord> _roundWords;
   int _currentIndex = 0;
   int _score = 0;
   int _totalAnswered = 0;
@@ -29,12 +37,13 @@ class GameStateProvider extends ChangeNotifier {
   bool _isFeedbackSoundEnabled = true;
   bool _isAutoSpeakEnabled = true;
 
-  ToneWord get currentWord => _shuffledWords[_currentIndex % _shuffledWords.length];
+  ToneWord get currentWord => _roundWords[_currentIndex];
   int get score => _score;
   int get totalAnswered => _totalAnswered;
+  int get totalQuestions => _roundWords.length;
   AnswerState get answerState => _answerState;
   int? get selectedTone => _selectedTone;
-  bool get isFinished => _totalAnswered >= _shuffledWords.length;
+  bool get isFinished => _totalAnswered >= _roundWords.length;
   bool get isFeedbackSoundEnabled => _isFeedbackSoundEnabled;
   bool get isAutoSpeakEnabled => _isAutoSpeakEnabled;
 
@@ -96,7 +105,7 @@ class GameStateProvider extends ChangeNotifier {
 
   void restart() {
     _ttsService.stop();
-    _shuffledWords.shuffle(Random());
+    _roundWords = _buildRoundWords();
     _currentIndex = 0;
     _score = 0;
     _totalAnswered = 0;
