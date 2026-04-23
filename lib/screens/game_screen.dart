@@ -6,7 +6,8 @@ import '../providers/game_state_provider.dart';
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
 
-  static const _toneLabels = ['1° tono ā', '2° tono á', '3° tono ǎ', '4° tono à'];
+  static const _toneLabels = ['ˉ', 'ˊ', 'ˇ', 'ˋ'];
+  static const _toneSubtitles = ['1° tono', '2° tono', '3° tono', '4° tono'];
   static const _toneColors = [
     Color(0xFF1565C0), // blu - 1° tono
     Color(0xFF2E7D32), // verde - 2° tono
@@ -25,7 +26,7 @@ class GameScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('Toni Cinesi'),
+        title: const Text('Tone Master'),
         backgroundColor: const Color(0xFFD32F2F),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -153,6 +154,7 @@ class GameScreen extends StatelessWidget {
         return _ToneButton(
           tone: tone,
           label: _toneLabels[index],
+          subtitle: _toneSubtitles[index],
           color: _toneColors[index],
           answerState: provider.answerState,
           selectedTone: provider.selectedTone,
@@ -268,6 +270,7 @@ class _PinyinWithHighlight extends StatelessWidget {
 class _ToneButton extends StatelessWidget {
   final int tone;
   final String label;
+  final String subtitle;
   final Color color;
   final AnswerState answerState;
   final int? selectedTone;
@@ -277,6 +280,7 @@ class _ToneButton extends StatelessWidget {
   const _ToneButton({
     required this.tone,
     required this.label,
+    required this.subtitle,
     required this.color,
     required this.answerState,
     required this.selectedTone,
@@ -308,11 +312,22 @@ class _ToneButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(color: textColor, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
+          child: Stack(
+            // mainAxisAlignment: MainAxisAlignment.center,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: Text(
+                  label,
+                  style: TextStyle(color: textColor, fontSize: 60, fontWeight: FontWeight.w700, height: 1.0),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(subtitle, style: TextStyle(color: textColor.withValues(alpha: 0.9), fontSize: 12)),
+              ),
+            ],
           ),
         ),
       ),
