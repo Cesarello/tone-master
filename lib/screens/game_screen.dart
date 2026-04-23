@@ -6,6 +6,11 @@ import '../providers/game_state_provider.dart';
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
 
+  static const _correctColor = Color(0xFF2E7D32);
+  static const _correctContainerColor = Color(0xFFE8F5E9);
+  static const _wrongColor = Color(0xFFC62828);
+  static const _wrongContainerColor = Color(0xFFFFEBEE);
+
   static const _toneLabels = ['ˉ', 'ˊ', 'ˇ', 'ˋ'];
   static const _toneSubtitles = ['1° tono', '2° tono', '3° tono', '4° tono'];
   static const _toneColors = [
@@ -18,17 +23,16 @@ class GameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameStateProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (provider.isFinished) {
       return _buildResultScreen(context, provider);
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text('Tone Master'),
-        backgroundColor: const Color(0xFFD32F2F),
-        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -52,9 +56,9 @@ class GameScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildProgressBar(provider),
+            _buildProgressBar(context, provider),
             const SizedBox(height: 32),
-            _buildWordCard(provider),
+            _buildWordCard(context, provider),
             const SizedBox(height: 40),
             _buildToneButtons(context, provider),
             const Spacer(),
@@ -65,9 +69,10 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressBar(GameStateProvider provider) {
+  Widget _buildProgressBar(BuildContext context, GameStateProvider provider) {
     final total = provider.totalQuestions;
     final answered = provider.totalAnswered;
+    final progress = total == 0 ? 0.0 : answered / total;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -79,33 +84,44 @@ class GameScreen extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: LinearProgressIndicator(
-            value: answered / total,
+            value: progress,
             minHeight: 8,
-            backgroundColor: Colors.grey[300],
-            color: const Color(0xFFD32F2F),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
         const SizedBox(height: 4),
-        Text('${answered + 1} / $total', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(
+          '${answered + 1} / $total',
+          style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.75)),
+        ),
       ],
     );
   }
 
-  Widget _buildWordCard(GameStateProvider provider) {
+  Widget _buildWordCard(BuildContext context, GameStateProvider provider) {
     final word = provider.currentWord;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     Color? cardColor;
     if (provider.answerState == AnswerState.correct) {
-      cardColor = const Color(0xFFE8F5E9);
+      cardColor = theme.brightness == Brightness.dark ? _correctColor.withValues(alpha: 0.22) : _correctContainerColor;
     } else if (provider.answerState == AnswerState.wrong) {
-      cardColor = const Color(0xFFFFEBEE);
+      cardColor = theme.brightness == Brightness.dark ? _wrongColor.withValues(alpha: 0.22) : _wrongContainerColor;
     }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: cardColor ?? Colors.white,
+        color: cardColor ?? theme.cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.24 : 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
       child: Column(
@@ -121,19 +137,26 @@ class GameScreen extends StatelessWidget {
           Text(word.character, style: const TextStyle(fontSize: 80, height: 1.0)),
           const SizedBox(height: 16),
           if (provider.answerState == AnswerState.idle)
-            Text(word.pinyin, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w300, letterSpacing: 2))
+            Text(
+              word.pinyin,
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 2,
+                color: colorScheme.onSurface,
+              ),
+            )
           else
             _PinyinWithHighlight(
+              context: context,
               pinyinWithTone: word.pinyinWithTone,
-              highlightColor: provider.answerState == AnswerState.correct
-                  ? const Color(0xFF2E7D32)
-                  : const Color(0xFFC62828),
+              highlightColor: provider.answerState == AnswerState.correct ? _correctColor : _wrongColor,
             ),
           if (provider.answerState == AnswerState.wrong) ...[
             const SizedBox(height: 16),
             Text(
               'Risposta corretta: ${provider.currentWord.correctTone}° tono',
-              style: const TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w600, fontSize: 14),
+              style: const TextStyle(color: _wrongColor, fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ],
         ],
@@ -185,8 +208,9 @@ class GameScreen extends StatelessWidget {
 
   Widget _buildResultScreen(BuildContext context, GameStateProvider provider) {
     final percentage = (provider.score / provider.totalAnswered * 100).round();
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: colorScheme.surface,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -214,8 +238,6 @@ class GameScreen extends StatelessWidget {
               ElevatedButton(
                 onPressed: () => context.read<GameStateProvider>().restart(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD32F2F),
-                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -230,16 +252,22 @@ class GameScreen extends StatelessWidget {
 }
 
 class _PinyinWithHighlight extends StatelessWidget {
+  final BuildContext context;
   final String pinyinWithTone;
   final Color highlightColor;
 
-  const _PinyinWithHighlight({required this.pinyinWithTone, required this.highlightColor});
+  const _PinyinWithHighlight({required this.context, required this.pinyinWithTone, required this.highlightColor});
 
   static const _toneVowels = 'āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ';
 
   @override
   Widget build(BuildContext context) {
-    final base = TextStyle(fontSize: 32, fontWeight: FontWeight.w500, letterSpacing: 2, color: Colors.black);
+    final base = TextStyle(
+      fontSize: 32,
+      fontWeight: FontWeight.w500,
+      letterSpacing: 2,
+      color: Theme.of(this.context).colorScheme.onSurface,
+    );
     final spans = <TextSpan>[];
     final buffer = StringBuffer();
 
@@ -290,17 +318,19 @@ class _ToneButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Color buttonColor = color;
     Color textColor = Colors.white;
 
     if (answerState != AnswerState.idle) {
       if (tone == correctTone) {
-        buttonColor = const Color(0xFF2E7D32);
+        buttonColor = isDark ? GameScreen._correctColor.withValues(alpha: 0.85) : GameScreen._correctColor;
       } else if (tone == selectedTone) {
-        buttonColor = const Color(0xFFC62828);
+        buttonColor = isDark ? GameScreen._wrongColor.withValues(alpha: 0.88) : GameScreen._wrongColor;
       } else {
-        buttonColor = Colors.grey[300]!;
-        textColor = Colors.grey[600]!;
+        buttonColor = colorScheme.surfaceContainerHighest;
+        textColor = colorScheme.onSurfaceVariant;
       }
     }
 
