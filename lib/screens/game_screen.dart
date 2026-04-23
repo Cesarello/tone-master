@@ -69,6 +69,67 @@ class GameScreen extends StatelessWidget {
     );
   }
 
+  void _confirmRestart(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(sheetContext).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('Nuova sessione?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text(
+              'Verranno selezionati 20 nuovi caratteri casuali e il punteggio verrà azzerato.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Annulla'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      context.read<GameStateProvider>().restart();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFAF0000),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Ricomincia'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProgressBar(BuildContext context, GameStateProvider provider) {
     final total = provider.totalQuestions;
     final answered = provider.totalAnswered;
@@ -76,11 +137,23 @@ class GameScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Punteggio: ${provider.score} / $answered',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Punteggio: ${provider.score} / $answered',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              onPressed: () => _confirmRestart(context),
+              tooltip: 'Nuova sessione',
+              icon: const Icon(Icons.refresh_rounded),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: LinearProgressIndicator(
@@ -135,7 +208,16 @@ class GameScreen extends StatelessWidget {
             ),
           ),
           Text(word.character, style: const TextStyle(fontSize: 80, height: 1.0)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
+          Text(
+            word.translation,
+            style: TextStyle(
+              fontSize: 14,
+              fontStyle: FontStyle.italic,
+              color: colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 12),
           if (provider.answerState == AnswerState.idle)
             Text(
               word.pinyin,
@@ -152,13 +234,17 @@ class GameScreen extends StatelessWidget {
               pinyinWithTone: word.pinyinWithTone,
               highlightColor: provider.answerState == AnswerState.correct ? _correctColor : _wrongColor,
             ),
-          if (provider.answerState == AnswerState.wrong) ...[
-            const SizedBox(height: 16),
-            Text(
+          const SizedBox(height: 16),
+          Visibility(
+            visible: provider.answerState == AnswerState.wrong,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Text(
               'Risposta corretta: ${provider.currentWord.correctTone}° tono',
               style: const TextStyle(color: _wrongColor, fontWeight: FontWeight.w600, fontSize: 14),
             ),
-          ],
+          ),
         ],
       ),
     );
