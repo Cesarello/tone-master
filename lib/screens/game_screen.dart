@@ -23,18 +23,21 @@ class GameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameStateProvider>();
-    final colorScheme = Theme.of(context).colorScheme;
 
     if (provider.isFinished) {
       return _buildResultScreen(context, provider);
     }
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         title: const Text('Tone Master'),
         elevation: 0,
         actions: [
+          IconButton(
+            onPressed: () => _showToneFilterSheet(context),
+            tooltip: 'Filtra toni della lezione',
+            icon: Icon(Icons.filter_alt),
+          ),
           IconButton(
             onPressed: () => context.read<GameStateProvider>().toggleAutoSpeak(),
             tooltip: provider.isAutoSpeakEnabled
@@ -52,7 +55,7 @@ class GameScreen extends StatelessWidget {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -69,7 +72,105 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  void _confirmRestart(BuildContext context) {
+  void _showToneFilterSheet(BuildContext context) {
+    final provider = context.read<GameStateProvider>();
+    final selectedTones = Set<int>.from(provider.enabledTones);
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Theme.of(sheetContext).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Filtra i toni', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('Seleziona quali toni includere nelle prossime lezioni.'),
+                    const SizedBox(height: 16),
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 2.3,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: List.generate(4, (index) {
+                        final tone = index + 1;
+                        final isSelected = selectedTones.contains(tone);
+                        final colorScheme = Theme.of(sheetContext).colorScheme;
+                        return FilledButton.tonal(
+                          onPressed: () {
+                            setSheetState(() {
+                              if (!isSelected) {
+                                selectedTones.add(tone);
+                              } else if (selectedTones.length > 2) {
+                                selectedTones.remove(tone);
+                              }
+                            });
+                          },
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            backgroundColor: isSelected
+                                ? colorScheme.primaryContainer
+                                : colorScheme.surfaceContainerHighest,
+                            foregroundColor: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('$tone° tono'),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Devi lasciare almeno due toni attivi.'),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Annulla'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              Navigator.pop(sheetContext);
+                              _confirmRestart(context, onConfirm: () => provider.setEnabledTones(selectedTones));
+                            },
+                            child: const Text('Applica filtro'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmRestart(BuildContext context, {VoidCallback? onConfirm}) {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -111,7 +212,11 @@ class GameScreen extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      context.read<GameStateProvider>().restart();
+                      if (onConfirm != null) {
+                        onConfirm();
+                      } else {
+                        context.read<GameStateProvider>().restart();
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFAF0000),
@@ -254,21 +359,23 @@ class GameScreen extends StatelessWidget {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 10,
       childAspectRatio: 2.5,
       physics: const NeverScrollableScrollPhysics(),
       children: List.generate(4, (index) {
         final tone = index + 1;
+        final isToneEnabled = provider.enabledTones.contains(tone);
         return _ToneButton(
           tone: tone,
           label: _toneLabels[index],
           subtitle: _toneSubtitles[index],
           color: _toneColors[index],
+          isToneEnabled: isToneEnabled,
           answerState: provider.answerState,
           selectedTone: provider.selectedTone,
           correctTone: provider.currentWord.correctTone,
-          onTap: provider.answerState == AnswerState.idle
+          onTap: provider.answerState == AnswerState.idle && isToneEnabled
               ? () => context.read<GameStateProvider>().selectTone(tone)
               : null,
         );
@@ -293,7 +400,7 @@ class GameScreen extends StatelessWidget {
   }
 
   Widget _buildResultScreen(BuildContext context, GameStateProvider provider) {
-    final percentage = (provider.score / provider.totalAnswered * 100).round();
+    final percentage = provider.totalAnswered == 0 ? 0 : (provider.score / provider.totalAnswered * 100).round();
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -386,6 +493,7 @@ class _ToneButton extends StatelessWidget {
   final String label;
   final String subtitle;
   final Color color;
+  final bool isToneEnabled;
   final AnswerState answerState;
   final int? selectedTone;
   final int correctTone;
@@ -396,6 +504,7 @@ class _ToneButton extends StatelessWidget {
     required this.label,
     required this.subtitle,
     required this.color,
+    required this.isToneEnabled,
     required this.answerState,
     required this.selectedTone,
     required this.correctTone,
@@ -409,7 +518,10 @@ class _ToneButton extends StatelessWidget {
     Color buttonColor = color;
     Color textColor = Colors.white;
 
-    if (answerState != AnswerState.idle) {
+    if (!isToneEnabled) {
+      buttonColor = colorScheme.surfaceContainerHighest;
+      textColor = colorScheme.onSurfaceVariant.withValues(alpha: 0.85);
+    } else if (answerState != AnswerState.idle) {
       if (tone == correctTone) {
         buttonColor = isDark ? GameScreen._correctColor.withValues(alpha: 0.85) : GameScreen._correctColor;
       } else if (tone == selectedTone) {

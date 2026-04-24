@@ -12,16 +12,18 @@ enum AnswerState { idle, correct, wrong }
 
 class GameStateProvider extends ChangeNotifier {
   static const int _roundSize = 20;
+  static const Set<int> _allTones = {1, 2, 3, 4};
 
   GameStateProvider({TtsService? ttsService, FeedbackSoundService? feedbackSoundService})
     : _ttsService = ttsService ?? TtsService(),
       _feedbackSoundService = feedbackSoundService,
-      _roundWords = _buildRoundWords() {
+      _roundWords = _buildRoundWords(enabledTones: _allTones) {
     Future.microtask(_autoSpeakIfEnabled);
   }
 
-  static List<ToneWord> _buildRoundWords() {
-    final shuffledWords = List<ToneWord>.from(wordsList)..shuffle(Random());
+  static List<ToneWord> _buildRoundWords({required Set<int> enabledTones}) {
+    final filteredWords = wordsList.where((word) => enabledTones.contains(word.correctTone)).toList(growable: false);
+    final shuffledWords = List<ToneWord>.from(filteredWords)..shuffle(Random());
     return shuffledWords.take(min(_roundSize, shuffledWords.length)).toList(growable: false);
   }
 
@@ -36,6 +38,7 @@ class GameStateProvider extends ChangeNotifier {
   int? _selectedTone;
   bool _isFeedbackSoundEnabled = true;
   bool _isAutoSpeakEnabled = true;
+  Set<int> _enabledTones = {..._allTones};
 
   ToneWord get currentWord => _roundWords[_currentIndex];
   int get score => _score;
@@ -46,6 +49,7 @@ class GameStateProvider extends ChangeNotifier {
   bool get isFinished => _totalAnswered >= _roundWords.length;
   bool get isFeedbackSoundEnabled => _isFeedbackSoundEnabled;
   bool get isAutoSpeakEnabled => _isAutoSpeakEnabled;
+  Set<int> get enabledTones => _enabledTones;
 
   Future<void> speakCurrentWord() async {
     await _ttsService.speak(currentWord.character);
@@ -105,7 +109,7 @@ class GameStateProvider extends ChangeNotifier {
 
   void restart() {
     _ttsService.stop();
-    _roundWords = _buildRoundWords();
+    _roundWords = _buildRoundWords(enabledTones: _enabledTones);
     _currentIndex = 0;
     _score = 0;
     _totalAnswered = 0;
@@ -113,6 +117,16 @@ class GameStateProvider extends ChangeNotifier {
     _selectedTone = null;
     notifyListeners();
     _autoSpeakIfEnabled();
+  }
+
+  void setEnabledTones(Set<int> tones) {
+    if (tones.length < 2) return;
+
+    final nextTones = Set<int>.from(tones);
+    if (setEquals(_enabledTones, nextTones)) return;
+
+    _enabledTones = nextTones;
+    restart();
   }
 
   void _autoSpeakIfEnabled() {
