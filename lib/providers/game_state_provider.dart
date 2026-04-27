@@ -3,7 +3,6 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import '../data/words_data.dart';
 import '../models/tone_word.dart';
 import '../services/feedback_sound_service.dart';
 import '../services/tts_service.dart';
@@ -14,21 +13,26 @@ class GameStateProvider extends ChangeNotifier {
   static const int _roundSize = 20;
   static const Set<int> _allTones = {1, 2, 3, 4};
 
-  GameStateProvider({TtsService? ttsService, FeedbackSoundService? feedbackSoundService})
-    : _ttsService = ttsService ?? TtsService(),
-      _feedbackSoundService = feedbackSoundService,
-      _roundWords = _buildRoundWords(enabledTones: _allTones) {
-    Future.microtask(_autoSpeakIfEnabled);
+  GameStateProvider({
+    List<ToneWord> words = const [],
+    TtsService? ttsService,
+    FeedbackSoundService? feedbackSoundService,
+  }) : _ttsService = ttsService ?? TtsService(),
+       _feedbackSoundService = feedbackSoundService,
+       _allWords = words,
+       _roundWords = _buildRoundWords(words: words, enabledTones: _allTones) {
+    if (words.isNotEmpty) Future.microtask(_autoSpeakIfEnabled);
   }
 
-  static List<ToneWord> _buildRoundWords({required Set<int> enabledTones}) {
-    final filteredWords = wordsList.where((word) => enabledTones.contains(word.correctTone)).toList(growable: false);
+  static List<ToneWord> _buildRoundWords({required List<ToneWord> words, required Set<int> enabledTones}) {
+    final filteredWords = words.where((word) => enabledTones.contains(word.correctTone)).toList(growable: false);
     final shuffledWords = List<ToneWord>.from(filteredWords)..shuffle(Random());
     return shuffledWords.take(min(_roundSize, shuffledWords.length)).toList(growable: false);
   }
 
   final TtsService _ttsService;
   FeedbackSoundService? _feedbackSoundService;
+  List<ToneWord> _allWords;
   FeedbackSoundService get feedbackSoundService => _feedbackSoundService ??= FeedbackSoundService();
   List<ToneWord> _roundWords;
   int _currentIndex = 0;
@@ -109,7 +113,7 @@ class GameStateProvider extends ChangeNotifier {
 
   void restart() {
     _ttsService.stop();
-    _roundWords = _buildRoundWords(enabledTones: _enabledTones);
+    _roundWords = _buildRoundWords(words: _allWords, enabledTones: _enabledTones);
     _currentIndex = 0;
     _score = 0;
     _totalAnswered = 0;
@@ -117,6 +121,11 @@ class GameStateProvider extends ChangeNotifier {
     _selectedTone = null;
     notifyListeners();
     _autoSpeakIfEnabled();
+  }
+
+  void updateWords(List<ToneWord> words) {
+    _allWords = words;
+    restart();
   }
 
   void setEnabledTones(Set<int> tones) {

@@ -12,4 +12,14 @@ class ToneWord {
     required this.correctTone,
     required this.translation,
   });
+
+  factory ToneWord.fromJson(Map<String, dynamic> json) {
+    return ToneWord(
+      pinyin: json['pinyin'] as String,
+      pinyinWithTone: json['pinyin_with_tone'] as String,
+      character: json['character'] as String,
+      correctTone: json['correct_tone'] as int,
+      translation: json['translation'] as String,
+    );
+  }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/tone_word.dart';
 import '../providers/game_state_provider.dart';
+import '../providers/words_provider.dart';
 
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
@@ -24,6 +25,7 @@ class GameScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameStateProvider>();
+    final wordsProvider = context.watch<WordsProvider>();
 
     if (provider.isFinished) {
       return _ResultScreen(
@@ -38,6 +40,17 @@ class GameScreen extends StatelessWidget {
         title: const Text('Tone Master'),
         elevation: 0,
         actions: [
+          if (wordsProvider.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+            )
+          else
+            IconButton(
+              onPressed: () => _refreshWords(context),
+              tooltip: 'Riscarica parole',
+              icon: const Icon(Icons.download_rounded),
+            ),
           IconButton(
             onPressed: () => _showToneFilterSheet(context),
             tooltip: 'Filtra toni della lezione',
@@ -91,6 +104,21 @@ class GameScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _refreshWords(BuildContext context) async {
+    final wordsProvider = context.read<WordsProvider>();
+    await wordsProvider.refresh();
+
+    if (!context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    if (wordsProvider.hasError) {
+      messenger.showSnackBar(const SnackBar(content: Text('Download fallito: uso cache locale se disponibile')));
+      return;
+    }
+
+    messenger.showSnackBar(const SnackBar(content: Text('Parole aggiornate da Supabase')));
   }
 
   void _showToneFilterSheet(BuildContext context) {
