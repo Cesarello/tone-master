@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/tone_word.dart';
 import '../providers/game_state_provider.dart';
 
 class GameScreen extends StatelessWidget {
@@ -25,7 +26,11 @@ class GameScreen extends StatelessWidget {
     final provider = context.watch<GameStateProvider>();
 
     if (provider.isFinished) {
-      return _buildResultScreen(context, provider);
+      return _ResultScreen(
+        score: provider.score,
+        totalAnswered: provider.totalAnswered,
+        onRestart: () => context.read<GameStateProvider>().restart(),
+      );
     }
 
     return Scaffold(
@@ -59,13 +64,29 @@ class GameScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildProgressBar(context, provider),
+            _ProgressBar(
+              totalQuestions: provider.totalQuestions,
+              totalAnswered: provider.totalAnswered,
+              score: provider.score,
+              onRestart: () => _confirmRestart(context),
+            ),
             const SizedBox(height: 32),
-            _buildWordCard(context, provider),
+            _WordCard(
+              word: provider.currentWord,
+              answerState: provider.answerState,
+              onSpeak: provider.speakCurrentWord,
+            ),
             const SizedBox(height: 40),
-            _buildToneButtons(context, provider),
+            _ToneButtons(
+              enabledTones: provider.enabledTones,
+              answerState: provider.answerState,
+              selectedTone: provider.selectedTone,
+              correctTone: provider.currentWord.correctTone,
+              onSelectTone: (tone) => context.read<GameStateProvider>().selectTone(tone),
+            ),
             const Spacer(),
-            if (provider.answerState != AnswerState.idle) _buildNextButton(context, provider),
+            if (provider.answerState != AnswerState.idle)
+              _NextButton(onNext: () => context.read<GameStateProvider>().nextWord()),
           ],
         ),
       ),
@@ -74,157 +95,122 @@ class GameScreen extends StatelessWidget {
 
   void _showToneFilterSheet(BuildContext context) {
     final provider = context.read<GameStateProvider>();
-    final selectedTones = Set<int>.from(provider.enabledTones);
 
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Theme.of(sheetContext).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text('Filtra i toni', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text('Seleziona quali toni includere nelle prossime lezioni.'),
-                    const SizedBox(height: 16),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      shrinkWrap: true,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 2.3,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: List.generate(4, (index) {
-                        final tone = index + 1;
-                        final isSelected = selectedTones.contains(tone);
-                        final colorScheme = Theme.of(sheetContext).colorScheme;
-                        return FilledButton.tonal(
-                          onPressed: () {
-                            setSheetState(() {
-                              if (!isSelected) {
-                                selectedTones.add(tone);
-                              } else if (selectedTones.length > 2) {
-                                selectedTones.remove(tone);
-                              }
-                            });
-                          },
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            backgroundColor: isSelected
-                                ? colorScheme.primaryContainer
-                                : colorScheme.surfaceContainerHighest,
-                            foregroundColor: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: Text('$tone° tono'),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Devi lasciare almeno due toni attivi.'),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(sheetContext),
-                            child: const Text('Annulla'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () {
-                              Navigator.pop(sheetContext);
-                              _confirmRestart(context, onConfirm: () => provider.setEnabledTones(selectedTones));
-                            },
-                            child: const Text('Applica filtro'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => _ToneFilterSheet(
+        initialSelectedTones: provider.enabledTones,
+        onApply: (selectedTones) {
+          _confirmRestart(context, onConfirm: () => provider.setEnabledTones(selectedTones));
+        },
+      ),
     );
   }
 
   void _confirmRestart(BuildContext context, {VoidCallback? onConfirm}) {
+    final effectiveOnConfirm = onConfirm ?? () => context.read<GameStateProvider>().restart();
+
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+      builder: (_) => _RestartConfirmationSheet(onConfirm: effectiveOnConfirm),
+    );
+  }
+}
+
+class _ToneFilterSheet extends StatefulWidget {
+  final Set<int> initialSelectedTones;
+  final ValueChanged<Set<int>> onApply;
+
+  const _ToneFilterSheet({required this.initialSelectedTones, required this.onApply});
+
+  @override
+  State<_ToneFilterSheet> createState() => _ToneFilterSheetState();
+}
+
+class _ToneFilterSheetState extends State<_ToneFilterSheet> {
+  late final Set<int> _selectedTones;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTones = Set<int>.from(widget.initialSelectedTones);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(sheetContext).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Nuova sessione?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text('Filtra i toni', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
-              'Verranno selezionati 20 nuovi caratteri casuali e il punteggio verrà azzerato.',
-              textAlign: TextAlign.center,
+            const Text('Seleziona quali toni includere nelle prossime lezioni.'),
+            const SizedBox(height: 16),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.3,
+              physics: const NeverScrollableScrollPhysics(),
+              children: List.generate(4, (index) {
+                final tone = index + 1;
+                final isSelected = _selectedTones.contains(tone);
+
+                return FilledButton.tonal(
+                  onPressed: () {
+                    setState(() {
+                      if (!isSelected) {
+                        _selectedTones.add(tone);
+                      } else if (_selectedTones.length > 2) {
+                        _selectedTones.remove(tone);
+                      }
+                    });
+                  },
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: isSelected ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+                    foregroundColor: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('$tone° tono'),
+                );
+              }),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+            const Text('Devi lasciare almeno due toni attivi.'),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Annulla'),
-                  ),
+                  child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  child: FilledButton(
                     onPressed: () {
-                      Navigator.pop(sheetContext);
-                      if (onConfirm != null) {
-                        onConfirm();
-                      } else {
-                        context.read<GameStateProvider>().restart();
-                      }
+                      Navigator.pop(context);
+                      widget.onApply(Set<int>.from(_selectedTones));
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFAF0000),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Ricomincia'),
+                    child: const Text('Applica filtro'),
                   ),
                 ),
               ],
@@ -234,11 +220,91 @@ class GameScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildProgressBar(BuildContext context, GameStateProvider provider) {
-    final total = provider.totalQuestions;
-    final answered = provider.totalAnswered;
+class _RestartConfirmationSheet extends StatelessWidget {
+  final VoidCallback onConfirm;
+
+  const _RestartConfirmationSheet({required this.onConfirm});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text('Nuova sessione?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text(
+            'Verranno selezionati 20 nuovi caratteri casuali e il punteggio verrà azzerato.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Annulla'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFAF0000),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Ricomincia'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  final int totalQuestions;
+  final int totalAnswered;
+  final int score;
+  final VoidCallback onRestart;
+
+  const _ProgressBar({
+    required this.totalQuestions,
+    required this.totalAnswered,
+    required this.score,
+    required this.onRestart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = totalQuestions;
+    final answered = totalAnswered;
     final progress = total == 0 ? 0.0 : answered / total;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -246,12 +312,12 @@ class GameScreen extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                'Punteggio: ${provider.score} / $answered',
+                'Punteggio: $score / $answered',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
             IconButton(
-              onPressed: () => _confirmRestart(context),
+              onPressed: onRestart,
               tooltip: 'Nuova sessione',
               icon: const Icon(Icons.refresh_rounded),
               visualDensity: VisualDensity.compact,
@@ -276,16 +342,28 @@ class GameScreen extends StatelessWidget {
       ],
     );
   }
+}
 
-  Widget _buildWordCard(BuildContext context, GameStateProvider provider) {
-    final word = provider.currentWord;
+class _WordCard extends StatelessWidget {
+  final ToneWord word;
+  final AnswerState answerState;
+  final VoidCallback onSpeak;
+
+  const _WordCard({required this.word, required this.answerState, required this.onSpeak});
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     Color? cardColor;
-    if (provider.answerState == AnswerState.correct) {
-      cardColor = theme.brightness == Brightness.dark ? _correctColor.withValues(alpha: 0.22) : _correctContainerColor;
-    } else if (provider.answerState == AnswerState.wrong) {
-      cardColor = theme.brightness == Brightness.dark ? _wrongColor.withValues(alpha: 0.22) : _wrongContainerColor;
+    if (answerState == AnswerState.correct) {
+      cardColor = theme.brightness == Brightness.dark
+          ? GameScreen._correctColor.withValues(alpha: 0.22)
+          : GameScreen._correctContainerColor;
+    } else if (answerState == AnswerState.wrong) {
+      cardColor = theme.brightness == Brightness.dark
+          ? GameScreen._wrongColor.withValues(alpha: 0.22)
+          : GameScreen._wrongContainerColor;
     }
 
     return AnimatedContainer(
@@ -307,7 +385,7 @@ class GameScreen extends StatelessWidget {
           Align(
             alignment: Alignment.topRight,
             child: IconButton.filledTonal(
-              onPressed: provider.speakCurrentWord,
+              onPressed: onSpeak,
               tooltip: 'Pronuncia la parola',
               icon: const Icon(Icons.volume_up_rounded),
             ),
@@ -323,7 +401,7 @@ class GameScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          if (provider.answerState == AnswerState.idle)
+          if (answerState == AnswerState.idle)
             Text(
               word.pinyin,
               style: TextStyle(
@@ -335,27 +413,43 @@ class GameScreen extends StatelessWidget {
             )
           else
             _PinyinWithHighlight(
-              context: context,
               pinyinWithTone: word.pinyinWithTone,
-              highlightColor: provider.answerState == AnswerState.correct ? _correctColor : _wrongColor,
+              highlightColor: answerState == AnswerState.correct ? GameScreen._correctColor : GameScreen._wrongColor,
             ),
           const SizedBox(height: 16),
           Visibility(
-            visible: provider.answerState == AnswerState.wrong,
+            visible: answerState == AnswerState.wrong,
             maintainSize: true,
             maintainAnimation: true,
             maintainState: true,
             child: Text(
-              'Risposta corretta: ${provider.currentWord.correctTone}° tono',
-              style: const TextStyle(color: _wrongColor, fontWeight: FontWeight.w600, fontSize: 14),
+              'Risposta corretta: ${word.correctTone}° tono',
+              style: const TextStyle(color: GameScreen._wrongColor, fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildToneButtons(BuildContext context, GameStateProvider provider) {
+class _ToneButtons extends StatelessWidget {
+  final Set<int> enabledTones;
+  final AnswerState answerState;
+  final int? selectedTone;
+  final int correctTone;
+  final ValueChanged<int> onSelectTone;
+
+  const _ToneButtons({
+    required this.enabledTones,
+    required this.answerState,
+    required this.selectedTone,
+    required this.correctTone,
+    required this.onSelectTone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -365,29 +459,34 @@ class GameScreen extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       children: List.generate(4, (index) {
         final tone = index + 1;
-        final isToneEnabled = provider.enabledTones.contains(tone);
+        final isToneEnabled = enabledTones.contains(tone);
         return _ToneButton(
           tone: tone,
-          label: _toneLabels[index],
-          subtitle: _toneSubtitles[index],
-          color: _toneColors[index],
+          label: GameScreen._toneLabels[index],
+          subtitle: GameScreen._toneSubtitles[index],
+          color: GameScreen._toneColors[index],
           isToneEnabled: isToneEnabled,
-          answerState: provider.answerState,
-          selectedTone: provider.selectedTone,
-          correctTone: provider.currentWord.correctTone,
-          onTap: provider.answerState == AnswerState.idle && isToneEnabled
-              ? () => context.read<GameStateProvider>().selectTone(tone)
-              : null,
+          answerState: answerState,
+          selectedTone: selectedTone,
+          correctTone: correctTone,
+          onTap: answerState == AnswerState.idle && isToneEnabled ? () => onSelectTone(tone) : null,
         );
       }),
     );
   }
+}
 
-  Widget _buildNextButton(BuildContext context, GameStateProvider provider) {
+class _NextButton extends StatelessWidget {
+  final VoidCallback onNext;
+
+  const _NextButton({required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: ElevatedButton(
-        onPressed: () => context.read<GameStateProvider>().nextWord(),
+        onPressed: onNext,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFD32F2F),
           foregroundColor: Colors.white,
@@ -398,10 +497,20 @@ class GameScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildResultScreen(BuildContext context, GameStateProvider provider) {
-    final percentage = provider.totalAnswered == 0 ? 0 : (provider.score / provider.totalAnswered * 100).round();
+class _ResultScreen extends StatelessWidget {
+  final int score;
+  final int totalAnswered;
+  final VoidCallback onRestart;
+
+  const _ResultScreen({required this.score, required this.totalAnswered, required this.onRestart});
+
+  @override
+  Widget build(BuildContext context) {
+    final percentage = totalAnswered == 0 ? 0 : (score / totalAnswered * 100).round();
     final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: Center(
@@ -414,10 +523,7 @@ class GameScreen extends StatelessWidget {
               const SizedBox(height: 16),
               const Text('Completato!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                '${provider.score} / ${provider.totalAnswered} corrette ($percentage%)',
-                style: const TextStyle(fontSize: 20),
-              ),
+              Text('$score / $totalAnswered corrette ($percentage%)', style: const TextStyle(fontSize: 20)),
               const SizedBox(height: 8),
               Text(
                 percentage >= 80
@@ -429,7 +535,7 @@ class GameScreen extends StatelessWidget {
               ),
               const SizedBox(height: 48),
               ElevatedButton(
-                onPressed: () => context.read<GameStateProvider>().restart(),
+                onPressed: onRestart,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 48),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -445,11 +551,10 @@ class GameScreen extends StatelessWidget {
 }
 
 class _PinyinWithHighlight extends StatelessWidget {
-  final BuildContext context;
   final String pinyinWithTone;
   final Color highlightColor;
 
-  const _PinyinWithHighlight({required this.context, required this.pinyinWithTone, required this.highlightColor});
+  const _PinyinWithHighlight({required this.pinyinWithTone, required this.highlightColor});
 
   static const _toneVowels = 'āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ';
 
@@ -459,7 +564,7 @@ class _PinyinWithHighlight extends StatelessWidget {
       fontSize: 32,
       fontWeight: FontWeight.w500,
       letterSpacing: 2,
-      color: Theme.of(this.context).colorScheme.onSurface,
+      color: Theme.of(context).colorScheme.onSurface,
     );
     final spans = <TextSpan>[];
     final buffer = StringBuffer();
